@@ -1,0 +1,11 @@
+# installed package from vendor
+vendor
+
+# binary
+kafkabulkcommit
+
+# vscode
+.vscode
+
+# dep package lock
+Gopkg.lock
