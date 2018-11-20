@@ -45,18 +45,6 @@ func (k *KafkaConsumer) createConsumer(broker, group string) {
 	k.addChan = make(chan bool)
 }
 
-func (k *KafkaConsumer) resetOffsetCount() {
-	k.Lock()
-	defer k.Unlock()
-	k.readedOffsets = 0
-}
-
-func (k *KafkaConsumer) getCountMessage() int {
-	k.RLock()
-	defer k.RUnlock()
-	return k.readedOffsets
-}
-
 func (k *KafkaConsumer) commit() ([]kafka.TopicPartition, error) {
 	commitedOffsets, err := k.consumer.Commit()
 	if err != nil {
