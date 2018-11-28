@@ -71,18 +71,10 @@ func (k *KafkaConsumer) bgProcess() (chan bool, chan bool) {
 					k.commit(0)
 				}
 			case <-time.After(commitMessageDefaultTime * time.Second):
-				if k.readedOffsets > 0 {
-					message := fmt.Sprintf("%v message commited.\n", k.readedOffsets)
-					k.commit(0)
-					fmt.Printf(message)
-				}
+				k.commitIfHaveMessage()
 			case <-quitChan:
 				fmt.Println("Signal Close")
-				if k.readedOffsets > 0 {
-					message := fmt.Sprintf("%v message commited.\n", k.readedOffsets)
-					k.commit(0)
-					fmt.Printf(message)
-				}
+				k.commitIfHaveMessage()
 				return
 			}
 		}
@@ -91,7 +83,17 @@ func (k *KafkaConsumer) bgProcess() (chan bool, chan bool) {
 	return addChan, quitChan
 }
 
+func (k *KafkaConsumer) commitIfHaveMessage() {
+	if k.readedOffsets > 0 {
+		message := fmt.Sprintf("%v message commited.\n", k.readedOffsets)
+		k.commit(0)
+		fmt.Printf(message)
+	}
+}
+
+// Run wil run kafka consumer
 func (k *KafkaConsumer) Run(broker, group string, topics []string, numOfWorker int, sigchan chan os.Signal) error {
+	start := time.Now()
 	k.createConsumer(broker, group, numOfWorker)
 	c := k.consumer
 
@@ -123,7 +125,7 @@ kafkaConsumer:
 
 				fmt.Printf("Consume message from partition : %v, offset : %v \n", e.TopicPartition.Partition, e.TopicPartition.Offset)
 				go func() {
-					k.DoSomething(e.TopicPartition.Partition, int64(e.TopicPartition.Offset))
+					k.doSomething(e.TopicPartition.Partition, int64(e.TopicPartition.Offset))
 					<-k.workersCh
 					wgroup.Done()
 				}()
@@ -139,21 +141,25 @@ kafkaConsumer:
 		}
 	}
 
-	fmt.Printf("Closing consumer\n")
+	fmt.Printf("closing consumer\n")
 	c.Close()
 
 	fmt.Println("waiting for all process done")
 	wgroup.Wait()
 	fmt.Println("all process done")
 
+	elapsed := time.Since(start)
+	fmt.Printf("all message finish in %v", elapsed.Seconds())
 	return nil
 }
 
-func (k *KafkaConsumer) DoSomething(partition int32, offset int64) {
-	minDelay := 2
+func (k *KafkaConsumer) doSomething(partition int32, offset int64) {
+	start := time.Now()
+	minDelay := 0
 	maxDelay := 10
 	randomSleep := int32(minDelay) + rand.Int31n(int32(maxDelay)-int32(minDelay))
 	time.Sleep(time.Duration(randomSleep) * time.Second)
 
-	fmt.Printf("message from partition: %v, offset: %v finish\n", partition, offset)
+	elapsed := time.Since(start)
+	fmt.Printf("message from partition: %v, offset: %v finish in : %v second \n", partition, offset, elapsed.Seconds())
 }
