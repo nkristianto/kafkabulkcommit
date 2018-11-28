@@ -16,6 +16,7 @@ func main() {
 
 	typeFlag := flag.String("type", "consumer", "a string")
 	numOfPublish := flag.Int("publishCount", 1, "number of message to publish")
+	numOfWorker := flag.Int("worker", 1, "number of meximum concurrent process")
 
 	flag.Parse()
 
@@ -32,7 +33,7 @@ func main() {
 		}
 	} else {
 		kafkaClient := new(kafkaclient.KafkaConsumer)
-		if err := kafkaClient.Run(broker, group, topics, sigchan); err != nil {
+		if err := kafkaClient.Run(broker, group, topics, *numOfWorker, sigchan); err != nil {
 			println(err)
 		}
 	}
