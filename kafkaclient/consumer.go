@@ -27,7 +27,7 @@ func (k *KafkaConsumer) createConsumer(broker, group string, numOfWorker int) {
 		"bootstrap.servers":       broker,
 		"group.id":                group,
 		"session.timeout.ms":      6000,
-		"heartbeat.interval.ms":   150,
+		"heartbeat.interval.ms":   3000,
 		"socket.keepalive.enable": true,
 		"enable.auto.commit":      false,
 		"default.topic.config":    kafka.ConfigMap{"auto.offset.reset": "earliest"}})
@@ -36,7 +36,7 @@ func (k *KafkaConsumer) createConsumer(broker, group string, numOfWorker int) {
 		fmt.Fprintf(os.Stderr, "Failed to create consumer: %s\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("Created Consumer %v\n", c)
+	fmt.Printf("Consumer %v Created \n", c)
 
 	k.consumer = c
 	k.workersCh = make(chan int, numOfWorker)
@@ -72,14 +72,16 @@ func (k *KafkaConsumer) bgProcess() (chan bool, chan bool) {
 				}
 			case <-time.After(commitMessageDefaultTime * time.Second):
 				if k.readedOffsets > 0 {
-					fmt.Printf("Have %v uncommited message. Message will commit.\n", k.readedOffsets)
+					message := fmt.Sprintf("%v message commited.\n", k.readedOffsets)
 					k.commit(0)
+					fmt.Printf(message)
 				}
 			case <-quitChan:
 				fmt.Println("Signal Close")
 				if k.readedOffsets > 0 {
-					fmt.Printf("Have %v uncommited message. Message will commit.\n", k.readedOffsets)
+					message := fmt.Sprintf("%v message commited.\n", k.readedOffsets)
 					k.commit(0)
+					fmt.Printf(message)
 				}
 				return
 			}
@@ -118,8 +120,10 @@ kafkaConsumer:
 				wgroup.Add(1)
 				go func() { addChan <- true }()
 				k.workersCh <- 1
+
+				fmt.Printf("Consume message from partition : %v, offset : %v \n", e.TopicPartition.Partition, e.TopicPartition.Offset)
 				go func() {
-					k.DoSomething(int64(e.TopicPartition.Offset))
+					k.DoSomething(e.TopicPartition.Partition, int64(e.TopicPartition.Offset))
 					<-k.workersCh
 					wgroup.Done()
 				}()
@@ -138,18 +142,18 @@ kafkaConsumer:
 	fmt.Printf("Closing consumer\n")
 	c.Close()
 
-	fmt.Println("WAITING FOR ALL PROCESS DONE")
+	fmt.Println("waiting for all process done")
 	wgroup.Wait()
-	fmt.Println("ALL PROCESS DONE")
+	fmt.Println("all process done")
 
 	return nil
 }
 
-func (k *KafkaConsumer) DoSomething(offset int64) {
+func (k *KafkaConsumer) DoSomething(partition int32, offset int64) {
 	minDelay := 2
 	maxDelay := 10
 	randomSleep := int32(minDelay) + rand.Int31n(int32(maxDelay)-int32(minDelay))
 	time.Sleep(time.Duration(randomSleep) * time.Second)
 
-	fmt.Printf("OFFSET %v FINISH\n", offset)
+	fmt.Printf("message from partition: %v, offset: %v finish\n", partition, offset)
 }
