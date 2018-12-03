@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/nkristianto/kafkabulkcommit/kafkaclient"
+	"github.com/nkristianto/kafkabulkcommit/kafkaclientchannel"
 )
 
 func main() {
@@ -16,7 +17,8 @@ func main() {
 
 	typeFlag := flag.String("type", "consumer", "a string")
 	numOfPublish := flag.Int("publishCount", 1, "number of message to publish")
-	numOfWorker := flag.Int("worker", 1, "number of meximum concurrent process")
+	numOfWorker := flag.Int("worker", 1, "number of maximum concurrent process")
+	numOfConsumer := flag.Int("consumer", 1, "number of consumer to spawn")
 
 	flag.Parse()
 
@@ -32,10 +34,13 @@ func main() {
 			}
 		}
 	} else {
-		kafkaClient := new(kafkaclient.KafkaConsumer)
-		if err := kafkaClient.Run(broker, group, topics, *numOfWorker, sigchan); err != nil {
-			println(err)
-		}
+		// kafkaClient := new(kafkaclient.KafkaConsumer)
+		// if err := kafkaClient.Run(broker, group, topics, *numOfWorker, sigchan); err != nil {
+		// 	println(err)
+		// }
+
+		consumers := kafkaclientchannel.NewConsumer(broker, group, topics[0], *numOfConsumer, *numOfWorker)
+		consumers.Run(sigchan)
 	}
 
 	println("finish")
