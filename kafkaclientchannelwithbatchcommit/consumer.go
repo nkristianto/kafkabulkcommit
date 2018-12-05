@@ -1,4 +1,4 @@
-package kafkaclientchannel
+package kafkaclientchannelwithbatchcommmit
 
 import (
 	"context"
@@ -59,6 +59,7 @@ func NewConsumer(broker string, group string, topic string, numOfConsumers int, 
 func (k *kafkaconsumer) commit(tryCount int) ([]kafka.TopicPartition, error) {
 	commitedOffsets, err := k.consumer.Commit()
 	if err != nil {
+		println("RETRYING TO COMMIT")
 		if tryCount <= commitTryCount {
 			tryCount++
 			k.commit(tryCount)
@@ -67,7 +68,42 @@ func (k *kafkaconsumer) commit(tryCount int) ([]kafka.TopicPartition, error) {
 		return nil, err
 	}
 
+	k.readedOffsets = 0
+
 	return commitedOffsets, nil
+}
+
+func (k *kafkaconsumer) bgProcess() (chan bool, chan bool) {
+	addChan := make(chan bool)
+	quitChan := make(chan bool)
+
+	go func() {
+		for {
+			select {
+			case <-addChan:
+				k.readedOffsets++
+				if k.readedOffsets == commitedMessageCount {
+					k.commit(0)
+				}
+			case <-time.After(commitMessageDefaultTime * time.Second):
+				k.commitIfHaveMessage()
+			case <-quitChan:
+				fmt.Println("Signal Close")
+				k.commitIfHaveMessage()
+				return
+			}
+		}
+	}()
+
+	return addChan, quitChan
+}
+
+func (k *kafkaconsumer) commitIfHaveMessage() {
+	if k.readedOffsets > 0 {
+		message := fmt.Sprintf("%v message commited.\n", k.readedOffsets)
+		k.commit(0)
+		fmt.Printf(message)
+	}
 }
 
 // Run wil run kafka consumer
@@ -77,7 +113,7 @@ func (c *Consumers) Run(sigchan chan os.Signal) error {
 
 	for key, consumer := range c.consumers {
 		waitters.Add(1)
-		go consumer.MessageProcessor(key, consumerCtx, &waitters, sigchan)
+		go consumer.MessageProcessor(key, consumerCtx, &waitters)
 	}
 
 	go func() {
@@ -92,18 +128,20 @@ func (c *Consumers) Run(sigchan chan os.Signal) error {
 	return nil
 }
 
-func (k *kafkaconsumer) MessageProcessor(ID int, ctx context.Context, wg *sync.WaitGroup, sigchan chan os.Signal) {
+func (k *kafkaconsumer) MessageProcessor(ID int, ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
 	if err := k.consumer.Subscribe(k.topic, nil); err != nil {
 		println("ERROR")
 		os.Exit(1)
 	}
 
+	addChan, quitChan := k.bgProcess()
 	var wgroup sync.WaitGroup
 kafkaConsumer:
 	for {
 		select {
 		case <-ctx.Done():
+			quitChan <- true
 			break kafkaConsumer
 		default:
 			ev := k.consumer.Poll(100)
@@ -113,12 +151,12 @@ kafkaConsumer:
 			switch e := ev.(type) {
 			case *kafka.Message:
 				wgroup.Add(1)
+				go func() { addChan <- true }()
 				k.workersCh <- 1
 
 				fmt.Printf("[%v]Consume message from partition : %v, offset : %v \n", ID, e.TopicPartition.Partition, e.TopicPartition.Offset)
 				go func() {
 					k.doSomething(e.TopicPartition.Partition, int64(e.TopicPartition.Offset))
-					k.commit(0)
 					<-k.workersCh
 					wgroup.Done()
 				}()
