@@ -6,8 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/nkristianto/kafkabulkcommit/consumerwithpool"
 	"github.com/nkristianto/kafkabulkcommit/kafkaclient"
-	"github.com/nkristianto/kafkabulkcommit/kafkaclientchannel"
 )
 
 func main() {
@@ -39,7 +39,7 @@ func main() {
 		// 	println(err)
 		// }
 
-		consumers := kafkaclientchannel.NewConsumer(broker, group, topics[0], *numOfConsumer, *numOfWorker)
+		consumers := consumerwithpool.NewConsumer(broker, group, topics[0], *numOfConsumer, *numOfWorker)
 		consumers.Run(sigchan)
 	}
 
